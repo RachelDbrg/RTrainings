@@ -1,0 +1,167 @@
+---
+title: "Linear_mixed_model"
+author: "RD"
+date: "2023-08-28"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+THIS A TEST 
+
+
+## References:
+
+<https://www.youtube.com/watch?v=oI1_SV1Rpfc>
+
+```{r}
+library(tidyverse)
+```
+
+
+## Step1 : Create the df
+
+```{r}
+df <- data.frame(
+  Person = c("Alice", "Bob", "Charlie", "David"),
+  Diet = c("A", "A", "B", "B"),
+  Before_Diet = c(102, 96, 83, 79),
+  After_1_week = c(97, 93, 79, 77),
+  After_2_weeks = c(95, 87, 78, 75),
+  After_3_weeks = c(93, 85, 74, 72)
+)
+
+print(df)
+```
+
+## Step2: Plot the data
+
+```{r}
+
+time_mapping <- c("Before_Diet" = "0", "After_1_week" = "1", "After_2_weeks" = "2", "After_3_weeks" = "3")
+
+df_long <- df %>% 
+  pivot_longer(cols= Before_Diet:After_3_weeks,
+               names_to = "time",
+               values_to = "weight") %>% 
+  mutate(time_clean_weeks = as.numeric(time_mapping[time]))
+```
+
+```{r}
+
+df_long %>% 
+  ggplot(aes(x = time_clean_weeks,
+             y = weight,
+             color = as.factor(Diet)))+
+  geom_point()+
+  theme_minimal()
+
+```
+
+## Use simple linear regression
+
+```{r}
+df_long %>% 
+  ungroup() %>% 
+  ggplot(aes(x = as.numeric(time_clean_weeks),
+             y = weight,
+             color = as.factor(Diet)))+
+geom_point() +
+  geom_smooth(method = "lm", se = FALSE, aes(group = 1), color = "black") +  # General regression
+  geom_smooth(method = "lm", se = FALSE, aes(group = Diet))  # Per-group regressions
+  
+```
+
+Here, the black line is the overall regression (for all individuals). The colored
+lines are the per group regressions lines. 
+
+```{r}
+overall_regression <- lm(weight ~ time_clean_weeks, data = df_long)
+summary(overall_regression)
+```
+The general intercept is of 89.775 kg (ie the mean weigth for all individuals, at 
+week = 0, so before the diet.)
+
+The slope is of -2.975, meaning that the average weight loss is
+of approximatively 3kg per week. 
+
+The pvalue of the slope is `0.17`, meaning that the slope is not
+different to 0.
+
+This simple linear regression assumes that all data points are independent,
+resulting in a high pvalue. 
+
+Because we have repeated measures for a same individual, LMM 
+is more appropriate to use. 
+
+## Model with random intercepts
+For each individual, we estimate the intercept, assuming that
+all individuals have the same slope. 
+
+
+
+```{r}
+library(lmerTest)
+
+random_intercept_model <- lmer(weight ~ time_clean_weeks+(1|Person),
+                               REML = FALSE,
+                               data = df_long)
+
+summary(random_intercept_model)
+
+```
+`weight ~ time_clean_weeks+(1|Person)` notation means that: 
+- `weeks` is the fixed-effect
+- `Person` is the random-effect
+- the left side of the `|` specifies if we want to use random intercept, slope
+or both. A `1` represents that we want to create a model with random
+intercept only for the subjects. 
+
+`REML = FALSE` is set so that we can compute the likelihood. 
+
+Here, the ouputs can be interpreted as follow: 
+- `89.7750` is the value of the overall intercept
+- `-2.9750` is the value of the overall slope
+
+These estimated are the same as the one that were obtained with simple LM.
+But now, the pvalue of the slope is < 0.001 (`time_clean_weeks  -2.9750     0.2436 12.0000  -12.21 3.97e-08 ***`)
+
+The random effects (ie the person-wise effect) can be obtained with:
+
+```{r}
+ranef(random_intercept_model)
+```
+The interpretation of this is: 
+"Alice as an intercept (ie weight at week 0) `11.391193` kg higher than the overall mean".
+"David as an intercept `9.523784` kg lower that the overall mean." 
+
+
+
+
+
+
+
+
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
